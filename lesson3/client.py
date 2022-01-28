@@ -83,5 +83,37 @@ def main():
         print('Не удалось декодировать сообщение сервера.')
 
 
+def test_presence():
+    """тест 1"""
+    test1 = create_presence(account_name='Guest')
+    assert test1 == {
+        ACTION: PRESENCE,
+        TIME: time.time(),
+        TYPE: STATUS,
+        USER: {
+            ACCOUNT_NAME: 'Guest',
+            STATUS: "Yep, I am here!"
+        }
+    }
+
+
+def test_process_ans_200():
+    """тест 2"""
+    test2 = process_ans({'response': 200})
+    assert test2 == '200 : OK'
+
+
+def test_process_ans_400():
+    """тест 3"""
+    test3 = process_ans({
+        RESPONSE: 400,
+        ERROR: 'Bad Request'
+    })
+    assert test3 == '400 : Bad Request'
+
+
 if __name__ == '__main__':
+    test_presence()
+    test_process_ans_200()
+    test_process_ans_400()
     main()

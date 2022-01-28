@@ -91,10 +91,73 @@ def main():
                     message_from_client = get_message(client)
                     print(message_from_client)
                     response = handle(message_from_client)
+                    print(response)
                     send_message(client, response)
                 except (ValueError, json.JSONDecodeError):
                     print('Принято некорретное сообщение от клиента.')
 
 
-if __name__ == '__main__':
+def test_get_response_200():
+    """тест ответа 200"""
+    test1 = handle({'action': 'presence', 'time': 1643050465.6124058, 'type': 'status',
+                    'user': {'account_name': 'Guest', 'status': 'Yep, I am here!'}})
+    assert test1 == {RESPONSE: 200}
+
+
+def test_get_response_bad_account_name():
+    """"тест ответа 400 при неверном имени пользователя"""
+    test2 = handle({'action': 'presence', 'time': 1643050465.6124058, 'type': 'status',
+                    'user': {'account_name': 'Another Name', 'status': 'Yep, I am here!'}})
+    assert test2 == {
+        RESPONSE: 400,
+        ERROR: 'Bad Request'
+    }
+
+
+def test_get_response_without_time():
+    """тест ответа 400 при отсутствии метки времени"""
+    test3 = handle({'action': 'presence', 'type': 'status',
+                    'user': {'account_name': 'Guest', 'status': 'Yep, I am here!'}})
+    assert test3 == {
+        RESPONSE: 400,
+        ERROR: 'Bad Request'
+    }
+
+
+def test_get_response_without_user():
+    """тест ответа 400 при отсутствии пользователя"""
+    test4 = handle({'action': 'presence', 'time': 1643050465.6124058, 'type': 'status'})
+    assert test4 == {
+        RESPONSE: 400,
+        ERROR: 'Bad Request'
+    }
+
+
+def test_get_response_without_action():
+    """тест ответа 400 при отсутствии действия"""
+    test5 = handle({'time': 1643050465.6124058, 'type': 'status',
+                    'user': {'account_name': 'Guest', 'status': 'Yep, I am here!'}})
+    assert test5 == {
+        RESPONSE: 400,
+        ERROR: 'Bad Request'
+    }
+
+
+def test_get_response_bad_action():
+    """тест ответа 400 при неправильном действии"""
+    test6 = handle({'action': 'BAD ACTION', 'time': 1643050465.6124058, 'type': 'status',
+                    'user': {'account_name': 'Guest', 'status': 'Yep, I am here!'}})
+    assert test6 == {
+        RESPONSE: 400,
+        ERROR: 'Bad Request'
+    }
+
+
+if __name__ == "__main__":
+    test_get_response_200()
+    test_get_response_bad_account_name()
+    test_get_response_without_time()
+    test_get_response_without_user()
+    test_get_response_without_action()
+    test_get_response_bad_action()
     main()
