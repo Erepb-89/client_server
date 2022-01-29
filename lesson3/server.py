@@ -1,12 +1,17 @@
 """Программа-сервер"""
-
+import argparse
 import socket
 import sys
-import time
 import json
+import logging
+from log.config import server_log_config
+from errors import IncorrectDataRecivedError
 from common.variables import ACTION, ACCOUNT_NAME, RESPONSE, MAX_CONNECTIONS, \
-    PRESENCE, TIME, USER, ERROR, DEFAULT_PORT, AUTHENTICATE, PASSWORD, RESPONSE_402, PROBE, IP_ADDRESS, PORT
+    PRESENCE, TIME, USER, ERROR, DEFAULT_PORT, AUTHENTICATE
 from common.utils import get_message, send_message
+
+# Инициализация логирования сервера.
+SERVER_LOGGER = logging.getLogger('server')
 
 
 def handle(message):
@@ -33,6 +38,17 @@ def handle(message):
     #     }
 
 
+def create_arg_parser():
+    """
+    Парсер аргументов коммандной строки
+    :return:
+    """
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-p', default=DEFAULT_PORT, type=int, nargs='?')
+    parser.add_argument('-a', default='', nargs='?')
+    return parser
+
+
 def main():
     '''
     Загрузка параметров командной строки, если нет параметров, то задаём значения по умоланию.
@@ -40,26 +56,19 @@ def main():
     server.py -p 8888 -a 127.0.0.1
     :return:
     '''
+    parser = create_arg_parser()
+    namespace = parser.parse_args(sys.argv[1:])
+    listen_address = namespace.a
+    listen_port = namespace.p
 
-    try:
-        listen_port = int(sys.argv[sys.argv.index(PORT) + 1]) if PORT in sys.argv else DEFAULT_PORT
-        if listen_port < 1024 or listen_port > 65535:
-            raise ValueError
-    except IndexError:
-        print('После параметра -\'p\' необходимо указать номер порта.')
-        sys.exit(1)
-    except ValueError:
-        print('В качастве порта может быть указано только число в диапазоне от 1024 до 65535.')
+    if not 1023 < listen_port < 65536:
+        SERVER_LOGGER.critical(
+            f'{listen_port} В качастве порта может быть указано только число в диапазоне от 1024 до 65535.')
         sys.exit(1)
 
-    # Затем загружаем какой адрес слушать
-
-    try:
-        listen_address = sys.argv[sys.argv.index(IP_ADDRESS) + 1] if IP_ADDRESS in sys.argv else ''
-
-    except IndexError:
-        print('После параметра \'a\'- необходимо указать адрес, который будет слушать сервер.')
-        sys.exit(1)
+    SERVER_LOGGER.info(f'Запущен сервер, порт для подключений: {listen_port}, '
+                       f'адрес с которого принимаются подключения: {listen_address}. '
+                       f'Если адрес не указан, принимаются соединения с любых адресов.')
 
     # создаем сокет AF_INET - IPv4, AF_INET6 - IPv6, SOCK_STREAM - сокет TCP, SOCK_DGRAM - сокет UDP
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -78,7 +87,7 @@ def main():
             # если очередь пуста - ожидает клиента
             try:
                 client, client_ip = sock.accept()
-                print(client_ip)
+                SERVER_LOGGER.info(f'Установлено соедение с ПК {client_ip}')
             except socket.error:
                 # print('No clients')
                 pass
@@ -89,75 +98,20 @@ def main():
                 try:
                     client.setblocking(True)
                     message_from_client = get_message(client)
-                    print(message_from_client)
+                    SERVER_LOGGER.debug(f'Получено сообщение {message_from_client}')
                     response = handle(message_from_client)
-                    print(response)
+                    SERVER_LOGGER.info(f'Cформирован ответ клиенту {response}')
                     send_message(client, response)
-                except (ValueError, json.JSONDecodeError):
-                    print('Принято некорретное сообщение от клиента.')
-
-
-def test_get_response_200():
-    """тест ответа 200"""
-    test1 = handle({'action': 'presence', 'time': 1643050465.6124058, 'type': 'status',
-                    'user': {'account_name': 'Guest', 'status': 'Yep, I am here!'}})
-    assert test1 == {RESPONSE: 200}
-
-
-def test_get_response_bad_account_name():
-    """"тест ответа 400 при неверном имени пользователя"""
-    test2 = handle({'action': 'presence', 'time': 1643050465.6124058, 'type': 'status',
-                    'user': {'account_name': 'Another Name', 'status': 'Yep, I am here!'}})
-    assert test2 == {
-        RESPONSE: 400,
-        ERROR: 'Bad Request'
-    }
-
-
-def test_get_response_without_time():
-    """тест ответа 400 при отсутствии метки времени"""
-    test3 = handle({'action': 'presence', 'type': 'status',
-                    'user': {'account_name': 'Guest', 'status': 'Yep, I am here!'}})
-    assert test3 == {
-        RESPONSE: 400,
-        ERROR: 'Bad Request'
-    }
-
-
-def test_get_response_without_user():
-    """тест ответа 400 при отсутствии пользователя"""
-    test4 = handle({'action': 'presence', 'time': 1643050465.6124058, 'type': 'status'})
-    assert test4 == {
-        RESPONSE: 400,
-        ERROR: 'Bad Request'
-    }
-
-
-def test_get_response_without_action():
-    """тест ответа 400 при отсутствии действия"""
-    test5 = handle({'time': 1643050465.6124058, 'type': 'status',
-                    'user': {'account_name': 'Guest', 'status': 'Yep, I am here!'}})
-    assert test5 == {
-        RESPONSE: 400,
-        ERROR: 'Bad Request'
-    }
-
-
-def test_get_response_bad_action():
-    """тест ответа 400 при неправильном действии"""
-    test6 = handle({'action': 'BAD ACTION', 'time': 1643050465.6124058, 'type': 'status',
-                    'user': {'account_name': 'Guest', 'status': 'Yep, I am here!'}})
-    assert test6 == {
-        RESPONSE: 400,
-        ERROR: 'Bad Request'
-    }
+                    SERVER_LOGGER.debug(f'Соединение с клиентом {client_ip} закрывается.')
+                except json.JSONDecodeError:
+                    SERVER_LOGGER.error(f'Не удалось декодировать JSON строку, полученную от '
+                                        f'клиента {client_ip}. Соединение закрывается.')
+                    client.close()
+                except IncorrectDataRecivedError:
+                    SERVER_LOGGER.error(f'От клиента {client_ip} приняты некорректные данные. '
+                                        f'Соединение закрывается.')
+                    client.close()
 
 
 if __name__ == "__main__":
-    test_get_response_200()
-    test_get_response_bad_account_name()
-    test_get_response_without_time()
-    test_get_response_without_user()
-    test_get_response_without_action()
-    test_get_response_bad_action()
     main()

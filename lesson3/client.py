@@ -1,12 +1,29 @@
 """Программа-клиент"""
-
+import argparse
 import sys
 import json
 import socket
 import time
+import logging
+from log.config import client_log_config
+from errors import ReqFieldMissingError
 from common.variables import ACTION, PRESENCE, TIME, TYPE, STATUS, USER, ACCOUNT_NAME, \
     RESPONSE, ERROR, DEFAULT_IP_ADDRESS, DEFAULT_PORT, AUTHENTICATE, PASSWORD, PROBE
 from common.utils import get_message, send_message
+
+# Инициализация клиентского логера
+CLIENT_LOGGER = logging.getLogger('client')
+
+
+def create_arg_parser():
+    """
+    Создаём парсер аргументов коммандной строки
+    :return:
+    """
+    parser = argparse.ArgumentParser()
+    parser.add_argument('addr', default=DEFAULT_IP_ADDRESS, nargs='?')
+    parser.add_argument('port', default=DEFAULT_PORT, type=int, nargs='?')
+    return parser
 
 
 def authentication(account_name='erepb'):
@@ -37,6 +54,7 @@ def create_presence(account_name='Guest'):
             STATUS: "Yep, I am here!"
         }
     }
+    CLIENT_LOGGER.debug(f'Сформировано {PRESENCE} сообщение для пользователя {account_name}')
     return out
 
 
@@ -50,26 +68,24 @@ def process_ans(message):
         if message[RESPONSE] == 200:
             return '200 : OK'
         return f'400 : {message[ERROR]}'
-    # elif ACTION in message:
-    #     if message[ACTION] == PROBE:
-    #         create_presence()
-    raise ValueError
+    raise ReqFieldMissingError(RESPONSE)
 
 
 def main():
     '''Загружаем параметры коммандной строки'''
-    # client.py 127.0.0.1 8888
-    try:
-        server_ip = sys.argv[2]
-        server_port = int(sys.argv[3])
-        if server_port < 1024 or server_port > 65535:
-            raise ValueError
-    except IndexError:
-        server_ip = DEFAULT_IP_ADDRESS
-        server_port = DEFAULT_PORT
-    except ValueError:
-        print('В качестве порта может быть указано только число в диапазоне от 1024 до 65535.')
+    parser = create_arg_parser()
+    namespace = parser.parse_args(sys.argv[1:])
+    server_ip = namespace.addr
+    server_port = namespace.port
+
+    # проверим подходящий номер порта
+    if not 1023 < server_port < 65536:
+        CLIENT_LOGGER.critical(
+            f'{server_port} В качастве порта может быть указано только число в диапазоне от 1024 до 65535.')
         sys.exit(1)
+
+    CLIENT_LOGGER.info(f'Запущен клиент с парамертами: '
+                       f'адрес сервера: {server_ip}, порт: {server_port}')
 
     # Инициализация сокета и обмен
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -78,42 +94,17 @@ def main():
     send_message(sock, message_to_server)
     try:
         answer = process_ans(get_message(sock))
+        CLIENT_LOGGER.info(f'Принят ответ от сервера {answer}')
         print(answer)
-    except (ValueError, json.JSONDecodeError):
-        print('Не удалось декодировать сообщение сервера.')
-
-
-def test_presence():
-    """тест 1"""
-    test1 = create_presence(account_name='Guest')
-    assert test1 == {
-        ACTION: PRESENCE,
-        TIME: time.time(),
-        TYPE: STATUS,
-        USER: {
-            ACCOUNT_NAME: 'Guest',
-            STATUS: "Yep, I am here!"
-        }
-    }
-
-
-def test_process_ans_200():
-    """тест 2"""
-    test2 = process_ans({'response': 200})
-    assert test2 == '200 : OK'
-
-
-def test_process_ans_400():
-    """тест 3"""
-    test3 = process_ans({
-        RESPONSE: 400,
-        ERROR: 'Bad Request'
-    })
-    assert test3 == '400 : Bad Request'
+    except json.JSONDecodeError:
+        CLIENT_LOGGER.error('Не удалось декодировать полученную Json строку.')
+    except ReqFieldMissingError as missing_error:
+        CLIENT_LOGGER.error(f'В ответе сервера отсутствует необходимое поле '
+                            f'{missing_error.missing_field}')
+    except ConnectionRefusedError:
+        CLIENT_LOGGER.critical(f'Не удалось подключиться к серверу {server_ip}:{server_port}, '
+                               f'конечный компьютер отверг запрос на подключение.')
 
 
 if __name__ == '__main__':
-    test_presence()
-    test_process_ans_200()
-    test_process_ans_400()
     main()

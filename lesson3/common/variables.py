@@ -1,4 +1,5 @@
 """Константы"""
+import logging
 
 # Порт по умолчанию для сетевого ваимодействия
 DEFAULT_PORT = 7777
@@ -34,3 +35,7 @@ IP_ADDRESS = '-a'
 RESPONSE_200 = "Необязательное сообщение/уведомление"
 RESPONSE_402 = 'This could be "wrong password" or "no account with that name"'
 RESPONSE_409 = "Someone is already connected with the given user name"
+
+# logging
+FORMATTER = logging.Formatter("%(asctime)s - %(levelname)s - %(filename)s - %(message)s")
+LOGGING_LEVEL = logging.DEBUG
