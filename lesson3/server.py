@@ -4,6 +4,7 @@ import socket
 import sys
 import json
 import logging
+from decorators import log
 from log.config import server_log_config
 from errors import IncorrectDataRecivedError
 from common.variables import ACTION, ACCOUNT_NAME, RESPONSE, MAX_CONNECTIONS, \
@@ -13,7 +14,7 @@ from common.utils import get_message, send_message
 # Инициализация логирования сервера.
 SERVER_LOGGER = logging.getLogger('server')
 
-
+@log
 def handle(message):
     '''
     Обработчик сообщений от клиентов, принимает словарь -
@@ -37,7 +38,7 @@ def handle(message):
     #         ERROR: RESPONSE_402
     #     }
 
-
+@log
 def create_arg_parser():
     """
     Парсер аргументов коммандной строки

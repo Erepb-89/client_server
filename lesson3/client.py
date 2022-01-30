@@ -5,6 +5,7 @@ import json
 import socket
 import time
 import logging
+from decorators import log
 from log.config import client_log_config
 from errors import ReqFieldMissingError
 from common.variables import ACTION, PRESENCE, TIME, TYPE, STATUS, USER, ACCOUNT_NAME, \
@@ -15,6 +16,7 @@ from common.utils import get_message, send_message
 CLIENT_LOGGER = logging.getLogger('client')
 
 
+@log
 def create_arg_parser():
     """
     Создаём парсер аргументов коммандной строки
@@ -26,6 +28,7 @@ def create_arg_parser():
     return parser
 
 
+@log
 def authentication(account_name='erepb'):
     out = {
         ACTION: AUTHENTICATE,
@@ -39,6 +42,7 @@ def authentication(account_name='erepb'):
     return out
 
 
+@log
 def create_presence(account_name='Guest'):
     '''
     Функция генерирует запрос о присутствии клиента
@@ -58,6 +62,7 @@ def create_presence(account_name='Guest'):
     return out
 
 
+@log
 def process_ans(message):
     '''
     Функция разбирает ответ сервера
