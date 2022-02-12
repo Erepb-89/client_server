@@ -18,6 +18,7 @@ TIME = 'time'
 TYPE = 'type'
 USER = 'user'
 ACCOUNT_NAME = 'account_name'
+SENDER = 'sender'
 
 # Прочие ключи, используемые в протоколе
 AUTHENTICATE = 'authenticate'
@@ -30,6 +31,10 @@ PASSWORD = 'password'
 PROBE = 'probe'
 PORT = '-p'
 IP_ADDRESS = '-a'
+MESSAGE = 'message'
+MESSAGE_TEXT = 'mess_text'
+EXIT = 'exit'
+TARGET = 'to'
 
 # responses
 RESPONSE_200 = "Необязательное сообщение/уведомление"
