@@ -3,6 +3,7 @@ import argparse
 import sys
 import json
 import socket
+import threading
 import time
 import logging
 from decorators import log
@@ -40,6 +41,35 @@ def message_from_users(sock, account_name):
 
 
 @log
+def user_interactive(sock, username):
+    """Функция взаимодействия с пользователем, запрашивает команды, отправляет сообщения"""
+    print_help()
+    while True:
+        command = input('Введите команду: ')
+        if command == 'message':
+            create_message(sock, username)
+        elif command == 'help':
+            print_help()
+        elif command == 'exit':
+            send_message(sock, create_exit_message(username))
+            print('Завершение соединения.')
+            CLIENT_LOGGER.info('Завершение работы по команде пользователя.')
+            # Задержка неоходима, чтобы успело уйти сообщение о выходе
+            time.sleep(0.5)
+            break
+        else:
+            print('Команда не распознана, попробойте снова.')
+
+
+def print_help():
+    """Функция выводящяя справку по использованию"""
+    print('Поддерживаемые команды:')
+    print('message - отправить сообщение. Кому и текст будет запрошены отдельно.')
+    print('help - вывести подсказки по командам')
+    print('exit - выход из программы')
+
+
+@log
 def create_arg_parser():
     """
     Создаём парсер аргументов коммандной строки
@@ -49,13 +79,11 @@ def create_arg_parser():
     parser.add_argument('addr', default=DEFAULT_IP_ADDRESS, nargs='?')
     parser.add_argument('port', default=DEFAULT_PORT, type=int, nargs='?')
     parser.add_argument('-n', '--name', default=None, nargs='?')
-    parser.add_argument('-m', '--mode', default='listen', nargs='?')
 
     namespace = parser.parse_args(sys.argv[1:])
     server_ip = namespace.addr
     server_port = namespace.port
     client_name = namespace.name
-    client_mode = namespace.mode
 
     # проверим подходящий номер порта
     if not 1023 < server_port < 65536:
@@ -63,13 +91,7 @@ def create_arg_parser():
             f'{server_port} В качастве порта может быть указано только число в диапазоне от 1024 до 65535.')
         sys.exit(1)
 
-    if client_mode not in ('listen', 'send'):
-        CLIENT_LOGGER.critical(
-            f'{server_port} Указан недопустимый режим работы {client_mode}.'
-            f'Допустимые режимы: listen, send')
-        sys.exit(1)
-
-    return server_ip, server_port, client_mode, client_name
+    return server_ip, server_port, client_name
 
 
 @log
@@ -100,19 +122,6 @@ def create_presence(account_name):
     }
     CLIENT_LOGGER.debug(f'Сформировано {PRESENCE} сообщение для пользователя {account_name}')
     return out
-
-
-@log
-def message_from_server(message):
-    """Функция - обработчик сообщений других пользователей, поступающих с сервера"""
-    if ACTION in message and message[ACTION] == MESSAGE and \
-            SENDER in message and MESSAGE_TEXT in message:
-        print(f'Получено сообщение от пользователя '
-              f'{message[SENDER]}:\n{message[MESSAGE_TEXT]}')
-        CLIENT_LOGGER.info(f'Получено сообщение от пользователя '
-                           f'{message[SENDER]}:\n{message[MESSAGE_TEXT]}')
-    else:
-        CLIENT_LOGGER.error(f'Получено некорректное сообщение с сервера: {message}')
 
 
 @log
@@ -165,7 +174,7 @@ def process_ans(message):
 
 def main():
     """Загружаем параметры коммандной строки"""
-    server_ip, server_port, client_mode, client_name = create_arg_parser()
+    server_ip, server_port, client_name = create_arg_parser()
 
     # Если имя пользователя не было задано, необходимо запросить пользователя.
     if not client_name:
@@ -174,13 +183,13 @@ def main():
 
     CLIENT_LOGGER.info(
         f'Запущен клиент с парамертами: адрес сервера: {server_ip}, '
-        f'порт: {server_port}, режим работы: {client_mode}, имя пользователя: {client_name}')
+        f'порт: {server_port}, имя пользователя: {client_name}')
 
     # Инициализация сокета и сообщение серверу о нашем появлении
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.connect((server_ip, server_port))
-        send_message(sock, create_presence(account_name=client_name))
+        send_message(sock, create_presence(client_name))
         answer = process_ans(get_message(sock))
         # time.sleep(1)
         CLIENT_LOGGER.info(f'Установлено соединение с сервером. Ответ сервера: {answer}')
@@ -194,36 +203,32 @@ def main():
     except ReqFieldMissingError as missing_error:
         CLIENT_LOGGER.error(f'В ответе сервера отсутствует необходимое поле {missing_error.missing_field}')
         sys.exit(1)
-    except ConnectionRefusedError:
+    except (ConnectionRefusedError, ConnectionError):
         CLIENT_LOGGER.critical(
             f'Не удалось подключиться к серверу {server_ip}:{server_port}, '
             f'конечный компьютер отверг запрос на подключение.')
         sys.exit(1)
     else:
         # Если соединение с сервером установлено корректно,
-        # начинаем обмен с ним, согласно требуемому режиму.
-        # основной цикл прогрммы:
-        if client_mode == 'send':
-            print('Режим работы - отправка сообщений.')
-        else:
-            print('Режим работы - приём сообщений.')
-        while True:
-            # time.sleep(1)
-            # режим работы - отправка сообщений
-            if client_mode == 'send':
-                try:
-                    create_message(sock, client_name)
-                except (ConnectionResetError, ConnectionError, ConnectionAbortedError):
-                    CLIENT_LOGGER.error(f'Соединение с сервером {server_ip} было потеряно.')
-                    sys.exit(1)
+        # запускаем клиенский процесс приёма сообщний
+        receiver = threading.Thread(target=message_from_users, args=(sock, client_name))
+        receiver.daemon = True
+        receiver.start()
+        # затем запускаем отправку сообщений и взаимодействие с пользователем.
+        user_interface = threading.Thread(target=user_interactive, args=(sock, client_name))
+        user_interface.daemon = True
+        user_interface.start()
+        CLIENT_LOGGER.debug('Запущены процессы')
 
-            # Режим работы приём:
-            if client_mode == 'listen':
-                try:
-                    message_from_server(get_message(sock))
-                except (ConnectionResetError, ConnectionError, ConnectionAbortedError):
-                    CLIENT_LOGGER.error(f'Соединение с сервером {server_ip} было потеряно.')
-                    sys.exit(1)
+        # Watchdog основной цикл, если один из потоков завершён,
+        # то значит или потеряно соединение или пользователь
+        # ввёл exit. Поскольку все события обработываются в потоках,
+        # достаточно просто завершить цикл.
+        while True:
+            time.sleep(1)
+            if receiver.is_alive() and user_interface.is_alive():
+                continue
+            break
 
 
 if __name__ == '__main__':

@@ -79,7 +79,8 @@ def process_message(message, names, listen_socks):
     elif message[TARGET] in names and names[message[TARGET]] not in listen_socks:
         raise ConnectionError
     else:
-        SERVER_LOGGER.error(f'Пользователь {message[TARGET]} не зарегистрирован на сервере, отправка сообщения невозможна.')
+        SERVER_LOGGER.error(
+            f'Пользователь {message[TARGET]} не зарегистрирован на сервере, отправка сообщения невозможна.')
 
 
 @log
@@ -155,22 +156,19 @@ def main():
                 try:
                     handle(get_message(client_with_message),
                            messages, client_with_message, clients, names)
-                    SERVER_LOGGER.debug(
-                        f'Получено сообщение от клиента {client_with_message}: {messages[client_with_message]}')
-                except:
+                except Exception:
                     SERVER_LOGGER.info(f'Клиент {client_with_message.getpeername()} отключился от сервера.')
                     clients.remove(client_with_message)
 
         # Если есть сообщения для отправки и ожидающие клиенты, отправляем им сообщение.
-        if messages and send_data_lst:
-            for mess in messages:
-                try:
-                    process_message(mess, names, send_data_lst)
-                except Exception:
-                    SERVER_LOGGER.info(f'Связь с клиентом с именем {mess[TARGET]} была потеряна')
-                    clients.remove(names[mess[TARGET]])
-                    del names[mess[TARGET]]
-            messages.clear()
+        for mess in messages:
+            try:
+                process_message(mess, names, send_data_lst)
+            except Exception:
+                SERVER_LOGGER.info(f'Связь с клиентом с именем {mess[TARGET]} была потеряна')
+                clients.remove(names[mess[TARGET]])
+                del names[mess[TARGET]]
+        messages.clear()
 
 
 if __name__ == "__main__":
